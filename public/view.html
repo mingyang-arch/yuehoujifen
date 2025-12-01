@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>查看秘密 - 阅后即焚</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #333;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .content {
+      display: none;
+    }
+
+    .content.show {
+      display: block;
+    }
+
+    .secret-box {
+      background: #f8f9fa;
+      border: 2px solid #667eea;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+      font-size: 16px;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    .warning {
+      padding: 15px;
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #856404;
+      margin-bottom: 20px;
+    }
+
+    .error {
+      background: #f8d7da;
+      border-left: 4px solid #dc3545;
+      color: #721c24;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+    }
+
+    .copy-btn {
+      margin-bottom: 10px;
+    }
+
+    .home-btn {
+      background: transparent;
+      border: 2px solid #667eea;
+      color: #667eea;
+    }
+
+    .home-btn:hover {
+      background: #667eea;
+      color: white;
+    }
+
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>阅后即焚</h1>
+    <p class="subtitle">查看一次性秘密</p>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>正在加载秘密...</p>
+    </div>
+
+    <div id="content" class="content">
+      <div class="warning">
+        ⚠️ 此秘密已被读取并永久销毁，无法再次查看
+      </div>
+
+      <div id="secretContent" class="secret-box"></div>
+
+      <button class="copy-btn" onclick="copySecret()">复制内容</button>
+      <button class="home-btn" onclick="goHome()">创建我的秘密</button>
+    </div>
+
+    <div id="error" class="content">
+      <div class="warning error">
+        <strong>❌ 秘密不存在</strong><br>
+        此秘密可能已被读取或不存在
+      </div>
+      <button class="home-btn" onclick="goHome()">创建新秘密</button>
+    </div>
+  </div>
+
+  <script>
+    async function loadSecret() {
+      const pathParts = window.location.pathname.split('/');
+      const secretId = pathParts[pathParts.length - 1];
+
+      try {
+        const response = await fetch(`/api/secret/${secretId}`);
+
+        document.getElementById('loading').style.display = 'none';
+
+        if (!response.ok) {
+          document.getElementById('error').classList.add('show');
+          return;
+        }
+
+        const data = await response.json();
+        document.getElementById('secretContent').textContent = data.content;
+        document.getElementById('content').classList.add('show');
+      } catch (error) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').classList.add('show');
+      }
+    }
+
+    function copySecret() {
+      const content = document.getElementById('secretContent').textContent;
+      navigator.clipboard.writeText(content).then(() => {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '已复制!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 2000);
+      });
+    }
+
+    function goHome() {
+      window.location.href = '/';
+    }
+
+    // 页面加载时自动获取秘密
+    loadSecret();
+  </script>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>阅后即焚 - 一次性秘密分享</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #333;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: inherit;
+      resize: vertical;
+      transition: border-color 0.3s;
+      margin-bottom: 20px;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .result {
+      display: none;
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 2px solid #667eea;
+    }
+
+    .result.show {
+      display: block;
+    }
+
+    .result h3 {
+      margin-bottom: 10px;
+      color: #333;
+      font-size: 16px;
+    }
+
+    .link-container {
+      display: flex;
+      gap: 10px;
+    }
+
+    .link-input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      background: white;
+    }
+
+    .copy-btn {
+      padding: 10px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .copy-btn:hover {
+      background: #5568d3;
+    }
+
+    .warning {
+      margin-top: 15px;
+      padding: 12px;
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #856404;
+    }
+
+    .new-secret {
+      margin-top: 15px;
+      padding: 10px;
+      background: transparent;
+      border: 2px solid #667eea;
+      color: #667eea;
+      font-size: 14px;
+    }
+
+    .new-secret:hover {
+      background: #667eea;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>阅后即焚</h1>
+    <p class="subtitle">分享一次性秘密，阅读后立即销毁</p>
+
+    <div id="inputSection">
+      <textarea
+        id="secretInput"
+        placeholder="输入你的秘密内容...&#10;（临时密码、私密消息等）"
+        maxlength="10000"
+      ></textarea>
+      <button id="generateBtn" onclick="generateLink()">生成一次性链接</button>
+    </div>
+
+    <div id="result" class="result">
+      <h3>一次性链接已生成</h3>
+      <div class="link-container">
+        <input type="text" id="linkInput" class="link-input" readonly>
+        <button class="copy-btn" onclick="copyLink()">复制</button>
+      </div>
+      <div class="warning">
+        ⚠️ 此链接只能打开一次，内容读取后将永久销毁
+      </div>
+      <button class="new-secret" onclick="reset()">创建新秘密</button>
+    </div>
+  </div>
+
+  <script>
+    async function generateLink() {
+      const input = document.getElementById('secretInput');
+      const content = input.value.trim();
+
+      if (!content) {
+        alert('请输入秘密内容');
+        return;
+      }
+
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.textContent = '生成中...';
+
+      try {
+        const response = await fetch('/api/secret', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content })
+        });
+
+        if (!response.ok) {
+          throw new Error('生成失败');
+        }
+
+        const data = await response.json();
+
+        document.getElementById('linkInput').value = data.url;
+        document.getElementById('inputSection').style.display = 'none';
+        document.getElementById('result').classList.add('show');
+      } catch (error) {
+        alert('生成链接失败，请重试');
+        btn.disabled = false;
+        btn.textContent = '生成一次性链接';
+      }
+    }
+
+    function copyLink() {
+      const input = document.getElementById('linkInput');
+      input.select();
+      document.execCommand('copy');
+
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '已复制!';
+      setTimeout(() => {
+        btn.textContent = originalText;
+      }, 2000);
+    }
+
+    function reset() {
+      document.getElementById('secretInput').value = '';
+      document.getElementById('inputSection').style.display = 'block';
+      document.getElementById('result').classList.remove('show');
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('generateBtn').textContent = '生成一次性链接';
+    }
+
+    // 回车提交（Ctrl/Cmd + Enter）
+    document.getElementById('secretInput').addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        generateLink();
+      }
+    });
+  </script>
+</body>
+</html>
