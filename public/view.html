@@ -26,7 +26,7 @@
       border-radius: 12px;
       padding: 40px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 500px;
+      max-width: 520px;
       width: 100%;
     }
 
@@ -44,18 +44,63 @@
       font-size: 14px;
     }
 
+    .section {
+      display: none;
+    }
+
+    .section.show {
+      display: block;
+    }
+
     .loading {
       text-align: center;
       padding: 40px;
       color: #666;
     }
 
-    .content {
-      display: none;
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
     }
 
-    .content.show {
-      display: block;
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .countdown-box {
+      background: #e8f4fd;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .countdown-label {
+      font-size: 14px;
+      color: #333;
+    }
+
+    .countdown-time {
+      font-size: 18px;
+      font-weight: 600;
+      color: #667eea;
+      font-family: monospace;
+    }
+
+    .views-info {
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+      margin-bottom: 15px;
     }
 
     .secret-box {
@@ -83,10 +128,54 @@
       margin-bottom: 20px;
     }
 
-    .error {
+    .error-box {
       background: #f8d7da;
       border-left: 4px solid #dc3545;
       color: #721c24;
+    }
+
+    .success-box {
+      background: #d4edda;
+      border-left: 4px solid #28a745;
+      color: #155724;
+    }
+
+    .password-form {
+      margin-bottom: 20px;
+    }
+
+    .password-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .password-input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 16px;
+      margin-bottom: 15px;
+      transition: border-color 0.3s;
+    }
+
+    .password-input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .password-error {
+      color: #dc3545;
+      font-size: 13px;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    .password-error.show {
+      display: block;
     }
 
     button {
@@ -106,6 +195,12 @@
       transform: translateY(-2px);
     }
 
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     .copy-btn {
       margin-bottom: 10px;
     }
@@ -121,19 +216,43 @@
       color: white;
     }
 
-    .spinner {
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #667eea;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20px;
+    /* 销毁动画 */
+    .destroyed-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
     }
 
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .destroyed-overlay.show {
+      display: flex;
+    }
+
+    .destroyed-content {
+      text-align: center;
+      color: white;
+    }
+
+    .destroyed-icon {
+      font-size: 80px;
+      animation: burn 1s ease-out;
+    }
+
+    .destroyed-text {
+      font-size: 24px;
+      margin-top: 20px;
+    }
+
+    @keyframes burn {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
     }
   </style>
 </head>
@@ -142,53 +261,229 @@
     <h1>阅后即焚</h1>
     <p class="subtitle">查看一次性秘密</p>
 
-    <div id="loading" class="loading">
-      <div class="spinner"></div>
-      <p>正在加载秘密...</p>
+    <!-- 加载中 -->
+    <div id="loadingSection" class="section show">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>正在加载秘密...</p>
+      </div>
     </div>
 
-    <div id="content" class="content">
+    <!-- 密码输入 -->
+    <div id="passwordSection" class="section">
       <div class="warning">
-        ⚠️ 此秘密已被读取并永久销毁，无法再次查看
+        此秘密已设置密码保护
       </div>
+      <div class="password-form">
+        <label class="password-label">请输入密码</label>
+        <input type="password" id="passwordInput" class="password-input" placeholder="输入查看密码" autofocus>
+        <p id="passwordError" class="password-error"></p>
+        <button id="submitPasswordBtn" onclick="submitPassword()">验证密码</button>
+      </div>
+    </div>
 
+    <!-- 秘密内容 -->
+    <div id="contentSection" class="section">
+      <div class="countdown-box" id="countdownBox">
+        <span class="countdown-label">剩余有效时间</span>
+        <span class="countdown-time" id="countdown">--:--:--</span>
+      </div>
+      <p class="views-info" id="viewsInfo"></p>
       <div id="secretContent" class="secret-box"></div>
-
+      <div class="warning success-box" id="destroyedWarning" style="display:none;">
+        此秘密已被永久销毁，无法再次查看
+      </div>
       <button class="copy-btn" onclick="copySecret()">复制内容</button>
       <button class="home-btn" onclick="goHome()">创建我的秘密</button>
     </div>
 
-    <div id="error" class="content">
-      <div class="warning error">
-        <strong>❌ 秘密不存在</strong><br>
-        此秘密可能已被读取或不存在
+    <!-- 错误 -->
+    <div id="errorSection" class="section">
+      <div class="warning error-box">
+        <strong id="errorTitle">秘密不存在</strong><br>
+        <span id="errorMessage">此秘密可能已被读取或已过期</span>
       </div>
       <button class="home-btn" onclick="goHome()">创建新秘密</button>
     </div>
   </div>
 
+  <!-- 销毁动画 -->
+  <div id="destroyedOverlay" class="destroyed-overlay">
+    <div class="destroyed-content">
+      <div class="destroyed-icon">&#128293;</div>
+      <p class="destroyed-text">秘密已销毁</p>
+    </div>
+  </div>
+
+  <script src="/js/crypto.js"></script>
   <script>
+    let secretId = '';
+    let keyFragment = '';
+    let secretMeta = null;
+    let secretData = null;
+    let countdownInterval = null;
+
+    function showSection(sectionId) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('show'));
+      document.getElementById(sectionId).classList.add('show');
+    }
+
     async function loadSecret() {
+      // 从URL获取秘密ID和密钥
       const pathParts = window.location.pathname.split('/');
-      const secretId = pathParts[pathParts.length - 1];
+      secretId = pathParts[pathParts.length - 1];
+      keyFragment = window.location.hash.substring(1);
+
+      if (!keyFragment) {
+        showError('链接无效', '缺少解密密钥，请使用完整链接');
+        return;
+      }
 
       try {
-        const response = await fetch(`/api/secret/${secretId}`);
+        // 获取元数据
+        const metaResponse = await fetch(`/api/secret/${secretId}/meta`);
 
-        document.getElementById('loading').style.display = 'none';
-
-        if (!response.ok) {
-          document.getElementById('error').classList.add('show');
+        if (!metaResponse.ok) {
+          const err = await metaResponse.json();
+          showError('秘密不存在', err.message || '此秘密可能已被读取或已过期');
           return;
         }
 
-        const data = await response.json();
-        document.getElementById('secretContent').textContent = data.content;
-        document.getElementById('content').classList.add('show');
+        secretMeta = await metaResponse.json();
+
+        // 检查是否需要密码
+        if (secretMeta.hasPassword) {
+          showSection('passwordSection');
+          document.getElementById('passwordInput').focus();
+        } else {
+          await viewSecret();
+        }
       } catch (error) {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('error').classList.add('show');
+        showError('加载失败', '无法连接服务器，请稍后再试');
       }
+    }
+
+    async function submitPassword() {
+      const password = document.getElementById('passwordInput').value;
+
+      if (!password) {
+        document.getElementById('passwordError').textContent = '请输入密码';
+        document.getElementById('passwordError').classList.add('show');
+        return;
+      }
+
+      const btn = document.getElementById('submitPasswordBtn');
+      btn.disabled = true;
+      btn.textContent = '验证中...';
+
+      try {
+        await viewSecret(password);
+      } catch (error) {
+        document.getElementById('passwordError').textContent = error.message;
+        document.getElementById('passwordError').classList.add('show');
+        btn.disabled = false;
+        btn.textContent = '验证密码';
+      }
+    }
+
+    async function viewSecret(password = null) {
+      try {
+        // 计算密码哈希
+        let passwordHash = null;
+        if (password) {
+          passwordHash = await CryptoUtils.hashPassword(password);
+        }
+
+        // 请求查看秘密
+        const viewResponse = await fetch(`/api/secret/${secretId}/view`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ passwordHash })
+        });
+
+        if (!viewResponse.ok) {
+          const err = await viewResponse.json();
+          if (err.error === 'INVALID_PASSWORD') {
+            throw new Error('密码错误，请重试');
+          }
+          showError('查看失败', err.message);
+          return;
+        }
+
+        secretData = await viewResponse.json();
+
+        // 解密内容
+        const plaintext = await CryptoUtils.decrypt(
+          secretData.ciphertext,
+          secretData.iv,
+          keyFragment,
+          secretData.salt,
+          password
+        );
+
+        // 显示内容
+        document.getElementById('secretContent').textContent = plaintext;
+
+        // 显示查看次数信息
+        if (secretData.destroyed) {
+          document.getElementById('viewsInfo').textContent = '最后一次查看';
+          document.getElementById('destroyedWarning').style.display = 'block';
+          // 显示销毁动画
+          setTimeout(() => {
+            showDestroyedAnimation();
+          }, 500);
+        } else {
+          document.getElementById('viewsInfo').textContent =
+            `剩余查看次数: ${secretData.remainingViews}`;
+        }
+
+        // 启动倒计时
+        startCountdown(new Date(secretData.expiresAt));
+
+        showSection('contentSection');
+      } catch (error) {
+        throw error;
+      }
+    }
+
+    function showError(title, message) {
+      document.getElementById('errorTitle').textContent = title;
+      document.getElementById('errorMessage').textContent = message;
+      showSection('errorSection');
+    }
+
+    function startCountdown(expiresAt) {
+      function updateCountdown() {
+        const now = new Date();
+        const diff = expiresAt - now;
+
+        if (diff <= 0) {
+          document.getElementById('countdown').textContent = '已过期';
+          document.getElementById('countdownBox').style.borderColor = '#dc3545';
+          clearInterval(countdownInterval);
+          return;
+        }
+
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        document.getElementById('countdown').textContent =
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+
+      updateCountdown();
+      countdownInterval = setInterval(updateCountdown, 1000);
+    }
+
+    function showDestroyedAnimation() {
+      const overlay = document.getElementById('destroyedOverlay');
+      overlay.classList.add('show');
+      setTimeout(() => {
+        overlay.classList.remove('show');
+      }, 2000);
     }
 
     function copySecret() {
@@ -207,7 +502,14 @@
       window.location.href = '/';
     }
 
-    // 页面加载时自动获取秘密
+    // 密码输入回车提交
+    document.getElementById('passwordInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        submitPassword();
+      }
+    });
+
+    // 页面加载时获取秘密
     loadSecret();
   </script>
 </body>
