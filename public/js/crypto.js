@@ -5,7 +5,7 @@
 const CryptoUtils = {
   // 支持的图片类型
   SUPPORTED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-  MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+  MAX_FILE_SIZE: 2 * 1024 * 1024, // 2MB
 
   /**
    * 生成随机字节
@@ -219,38 +219,63 @@ const CryptoUtils = {
   },
 
   /**
-   * 统一加密接口，支持文本和文件
+   * 统一加密接口，支持文本、图片或混合内容
    * 数据格式: [元数据长度 4字节][元数据 JSON][原始内容]
-   * @param {string|File} content - 文本内容或文件对象
-   * @param {string} contentType - 'text' 或 'image'
-   * @param {string|null} password - 可选密码
-   * @returns {Promise<{ciphertext: string, iv: string, salt: string|null, keyFragment: string, passwordHash: string|null, contentType: string, fileName: string|null, mimeType: string|null}>}
+   * @param {Object} params - 加密参数
+   * @param {string|null} params.text - 文本内容
+   * @param {File|null} params.file - 图片文件
+   * @param {string|null} params.password - 可选密码
+   * @returns {Promise<{ciphertext: string, iv: string, salt: string|null, keyFragment: string, passwordHash: string|null, contentType: string}>}
    */
-  async encryptContent(content, contentType = 'text', password = null) {
-    let dataBytes;
-    let metadata = { type: contentType };
+  async encryptContent({ text = null, file = null, password = null }) {
+    const hasText = text && text.trim().length > 0;
+    const hasFile = file instanceof File;
 
-    if (contentType === 'text') {
-      // 文本内容
-      const encoder = new TextEncoder();
-      dataBytes = encoder.encode(content);
-    } else if (contentType === 'image') {
-      // 图片文件
-      if (!(content instanceof File)) {
-        throw new Error('图片内容必须是 File 对象');
-      }
-      if (!this.SUPPORTED_IMAGE_TYPES.includes(content.type)) {
+    if (!hasText && !hasFile) {
+      throw new Error('请输入文本或上传图片');
+    }
+
+    let dataBytes;
+    let metadata = {};
+    let contentType;
+
+    // 验证图片
+    if (hasFile) {
+      if (!this.SUPPORTED_IMAGE_TYPES.includes(file.type)) {
         throw new Error('不支持的图片格式');
       }
-      if (content.size > this.MAX_FILE_SIZE) {
-        throw new Error('文件大小超过 10MB 限制');
+      if (file.size > this.MAX_FILE_SIZE) {
+        throw new Error('文件大小超过 2MB 限制');
       }
-      metadata.fileName = content.name;
-      metadata.mimeType = content.type;
-      const arrayBuffer = await this.fileToArrayBuffer(content);
+    }
+
+    if (hasText && hasFile) {
+      // 混合内容: 文本存入元数据，图片作为二进制内容
+      contentType = 'mixed';
+      metadata = {
+        type: 'mixed',
+        text: text.trim(),
+        fileName: file.name,
+        mimeType: file.type
+      };
+      const arrayBuffer = await this.fileToArrayBuffer(file);
       dataBytes = new Uint8Array(arrayBuffer);
+    } else if (hasText) {
+      // 仅文本
+      contentType = 'text';
+      metadata = { type: 'text' };
+      const encoder = new TextEncoder();
+      dataBytes = encoder.encode(text.trim());
     } else {
-      throw new Error('不支持的内容类型');
+      // 仅图片
+      contentType = 'image';
+      metadata = {
+        type: 'image',
+        fileName: file.name,
+        mimeType: file.type
+      };
+      const arrayBuffer = await this.fileToArrayBuffer(file);
+      dataBytes = new Uint8Array(arrayBuffer);
     }
 
     // 序列化元数据
@@ -314,9 +339,7 @@ const CryptoUtils = {
       salt: salt ? this.toBase64(salt) : null,
       keyFragment: this.toBase64URL(masterKey),
       passwordHash,
-      contentType,
-      fileName: metadata.fileName || null,
-      mimeType: metadata.mimeType || null
+      contentType
     };
   },
 
@@ -379,6 +402,13 @@ const CryptoUtils = {
       // 文本内容，转换为字符串
       const content = new TextDecoder().decode(contentBytes);
       return { content, metadata };
+    } else if (metadata.type === 'mixed') {
+      // 混合内容: 文本在 metadata.text，图片在 contentBytes
+      return {
+        content: contentBytes.buffer,
+        text: metadata.text,
+        metadata
+      };
     } else {
       // 二进制内容（图片），返回 ArrayBuffer
       return { content: contentBytes.buffer, metadata };

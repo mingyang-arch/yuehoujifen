@@ -302,6 +302,24 @@
       background: #d4edda;
       color: #28a745;
     }
+
+    .badge-mixed {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    /* 混合内容区域 */
+    .mixed-content {
+      margin-bottom: 20px;
+    }
+
+    .mixed-content .secret-box {
+      margin-bottom: 15px;
+    }
+
+    .mixed-content .image-box {
+      margin-bottom: 0;
+    }
   </style>
 </head>
 <body>
@@ -348,6 +366,16 @@
         <img id="secretImage" class="secret-image" src="" alt="秘密图片">
         <p id="imageInfo" class="image-info"></p>
         <button class="download-btn" onclick="downloadImage()">下载图片</button>
+      </div>
+      <!-- 混合内容 (文本+图片) -->
+      <div id="mixedContent" class="mixed-content" style="display:none;">
+        <div id="mixedTextContent" class="secret-box"></div>
+        <button class="copy-btn" onclick="copyMixedText()" style="margin-bottom:15px;">复制文本</button>
+        <div class="image-box">
+          <img id="mixedImage" class="secret-image" src="" alt="秘密图片">
+          <p id="mixedImageInfo" class="image-info"></p>
+          <button class="download-btn" onclick="downloadImage()">下载图片</button>
+        </div>
       </div>
       <div class="warning success-box" id="destroyedWarning" style="display:none;">
         此秘密已被永久销毁，无法再次查看
@@ -491,17 +519,24 @@
         if (contentType === 'text') {
           badge.textContent = '文本秘密';
           badge.className = 'content-type-badge badge-text';
-        } else {
+        } else if (contentType === 'image') {
           badge.textContent = '图片秘密';
           badge.className = 'content-type-badge badge-image';
+        } else if (contentType === 'mixed') {
+          badge.textContent = '文本+图片';
+          badge.className = 'content-type-badge badge-mixed';
         }
+
+        // 隐藏所有内容区域
+        document.getElementById('textContent').style.display = 'none';
+        document.getElementById('imageContent').style.display = 'none';
+        document.getElementById('mixedContent').style.display = 'none';
 
         // 根据类型显示内容
         if (contentType === 'text') {
           document.getElementById('secretContent').textContent = decrypted.content;
           document.getElementById('textContent').style.display = 'block';
-          document.getElementById('imageContent').style.display = 'none';
-        } else {
+        } else if (contentType === 'image') {
           // 创建 Blob URL 显示图片
           const mimeType = decrypted.metadata.mimeType || 'image/png';
           decryptedImageBlob = new Blob([decrypted.content], { type: mimeType });
@@ -512,8 +547,22 @@
           const fileName = decrypted.metadata.fileName || '图片';
           document.getElementById('imageInfo').textContent = fileName;
 
-          document.getElementById('textContent').style.display = 'none';
           document.getElementById('imageContent').style.display = 'block';
+        } else if (contentType === 'mixed') {
+          // 混合内容：显示文本和图片
+          document.getElementById('mixedTextContent').textContent = decrypted.text;
+
+          // 创建 Blob URL 显示图片
+          const mimeType = decrypted.metadata.mimeType || 'image/png';
+          decryptedImageBlob = new Blob([decrypted.content], { type: mimeType });
+          const imageUrl = URL.createObjectURL(decryptedImageBlob);
+          document.getElementById('mixedImage').src = imageUrl;
+
+          // 显示文件信息
+          const fileName = decrypted.metadata.fileName || '图片';
+          document.getElementById('mixedImageInfo').textContent = fileName;
+
+          document.getElementById('mixedContent').style.display = 'block';
         }
 
         // 显示查看次数信息
@@ -578,6 +627,18 @@
 
     function copySecret() {
       const content = document.getElementById('secretContent').textContent;
+      navigator.clipboard.writeText(content).then(() => {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '已复制!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 2000);
+      });
+    }
+
+    function copyMixedText() {
+      const content = document.getElementById('mixedTextContent').textContent;
       navigator.clipboard.writeText(content).then(() => {
         const btn = event.target;
         const originalText = btn.textContent;

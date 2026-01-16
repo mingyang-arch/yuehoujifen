@@ -65,7 +65,7 @@ app.post('/api/secret',
   body('iv').notEmpty().withMessage('IV不能为空'),
   body('expiresIn').isIn(['5m', '1h', '24h', '7d']).withMessage('无效的过期时间'),
   body('maxViews').isInt({ min: 1, max: 10 }).withMessage('查看次数必须在1-10之间'),
-  body('contentType').optional().isIn(['text', 'image']).withMessage('无效的内容类型'),
+  body('contentType').optional().isIn(['text', 'image', 'mixed']).withMessage('无效的内容类型'),
   handleValidationErrors,
   async (req, res) => {
     try {

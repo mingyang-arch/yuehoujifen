@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**阅后即焚 (yuehoujifen)** - A one-time secret sharing web application with end-to-end encryption. Users create encrypted secrets (text or images) with configurable expiration and view limits. Content is encrypted client-side before transmission; the server never sees plaintext.
+**阅后即焚 (yuehoujifen)** - A one-time secret sharing web application with end-to-end encryption. Users create encrypted secrets (text, images, or both) with configurable expiration and view limits. Content is encrypted client-side before transmission; the server never sees plaintext.
 
 ## Development Commands
 
@@ -23,11 +23,14 @@ Server runs on `http://localhost:3000`.
 **Data format for encryption:**
 `[4-byte metadata length][JSON metadata][raw content]`
 
-Metadata includes: `{ type: "text"|"image", fileName?, mimeType? }`
+Metadata structure by content type:
+- **text**: `{ type: "text" }` — content bytes are the text
+- **image**: `{ type: "image", fileName, mimeType }` — content bytes are the image
+- **mixed**: `{ type: "mixed", text: "...", fileName, mimeType }` — text stored in metadata, content bytes are the image
 
 **Creating a secret:**
 1. Client generates 32-byte random master key
-2. Client encrypts content with AES-256-GCM (text or binary)
+2. Client encrypts content with AES-256-GCM
 3. If password protected: PBKDF2 derives key from password, XORs with master key
 4. Ciphertext + IV + salt + contentType sent to server; master key stored in URL hash fragment
 5. Full URL: `https://host/s/{id}#{base64url-encoded-master-key}`
@@ -37,7 +40,7 @@ Metadata includes: `{ type: "text"|"image", fileName?, mimeType? }`
 2. Fetches metadata via `GET /api/secret/:id/meta`
 3. Fetches ciphertext via `POST /api/secret/:id/view` (with password hash if needed)
 4. Decrypts locally, parses metadata to determine content type
-5. Displays text in textarea or image via Blob URL
+5. Displays text, image, or both based on content type
 
 ### API Endpoints
 
@@ -49,10 +52,10 @@ Metadata includes: `{ type: "text"|"image", fileName?, mimeType? }`
 
 ### Key Files
 
-- **server.js** - Express backend with rate limiting, validation, bcrypt password verification, 10MB payload limit
-- **public/js/crypto.js** - Client-side AES-256-GCM encryption using Web Crypto API; supports text and binary (images)
-- **public/index.html** - Creation UI with text/image tabs, drag-drop upload, expiry selector, password toggle
-- **public/view.html** - Viewing UI with text/image display, download button, countdown timer, destroy animation
+- **server.js** - Express backend with rate limiting, validation, bcrypt password verification
+- **public/js/crypto.js** - Client-side AES-256-GCM encryption using Web Crypto API
+- **public/index.html** - Creation UI: text input above, image upload below (both optional, at least one required)
+- **public/view.html** - Viewing UI: displays text, image, or both depending on content type
 
 ### Storage Model
 
@@ -65,20 +68,20 @@ secrets.set(id, {
   expiresAt,            // Date object
   maxViews,             // 1-10
   viewCount,            // Current count
-  contentType           // 'text' or 'image'
+  contentType           // 'text', 'image', or 'mixed'
 });
 ```
 
 ### Crypto Module API
 
 ```javascript
-// Unified encryption for text and images
-CryptoUtils.encryptContent(content, contentType, password)
-// Returns: { ciphertext, iv, salt, keyFragment, passwordHash, contentType, fileName, mimeType }
+// Unified encryption for text, images, or both
+CryptoUtils.encryptContent({ text, file, password })
+// Returns: { ciphertext, iv, salt, keyFragment, passwordHash, contentType }
 
 // Unified decryption
 CryptoUtils.decryptContent(ciphertext, iv, keyFragment, salt, password)
-// Returns: { content: ArrayBuffer|string, metadata: { type, fileName?, mimeType? } }
+// Returns: { content: ArrayBuffer|string, text?: string, metadata: { type, fileName?, mimeType? } }
 ```
 
 ### Rate Limits
@@ -89,11 +92,11 @@ CryptoUtils.decryptContent(ciphertext, iv, keyFragment, salt, password)
 ### File Upload Constraints
 
 - Supported formats: image/jpeg, image/png, image/gif, image/webp
-- Max file size: 10MB
+- Max file size: 2MB
 
 ## Security Notes
 
 - Server stores only ciphertext; decryption requires URL hash fragment
 - Password hashed twice: SHA-256 client-side, bcrypt server-side
-- File metadata (name, type) encrypted along with content
+- File metadata (name, type) and text content encrypted together
 - In-memory storage loses data on restart; production should use Redis
