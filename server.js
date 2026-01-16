@@ -34,8 +34,8 @@ const viewLimiter = rateLimit({
 });
 
 // 中间件
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public'));
 
 // 安全头
@@ -65,10 +65,11 @@ app.post('/api/secret',
   body('iv').notEmpty().withMessage('IV不能为空'),
   body('expiresIn').isIn(['5m', '1h', '24h', '7d']).withMessage('无效的过期时间'),
   body('maxViews').isInt({ min: 1, max: 10 }).withMessage('查看次数必须在1-10之间'),
+  body('contentType').optional().isIn(['text', 'image']).withMessage('无效的内容类型'),
   handleValidationErrors,
   async (req, res) => {
     try {
-      const { ciphertext, iv, salt, passwordHash, expiresIn, maxViews } = req.body;
+      const { ciphertext, iv, salt, passwordHash, expiresIn, maxViews, contentType } = req.body;
 
       const id = nanoid(10);
       const expiresAt = new Date(Date.now() + EXPIRY_OPTIONS[expiresIn]);
@@ -87,7 +88,8 @@ app.post('/api/secret',
         expiresAt,
         createdAt: new Date(),
         maxViews: parseInt(maxViews),
-        viewCount: 0
+        viewCount: 0,
+        contentType: contentType || 'text'
       });
 
       res.status(201).json({ id, expiresAt: expiresAt.toISOString() });
@@ -137,7 +139,8 @@ app.get('/api/secret/:id/meta',
       hasPassword: !!secret.passwordHash,
       expiresAt: secret.expiresAt.toISOString(),
       remainingViews: secret.maxViews - secret.viewCount,
-      maxViews: secret.maxViews
+      maxViews: secret.maxViews,
+      contentType: secret.contentType || 'text'
     });
   }
 );
@@ -208,7 +211,8 @@ app.post('/api/secret/:id/view',
       salt: secret.salt,
       remainingViews,
       expiresAt: secret.expiresAt.toISOString(),
-      destroyed
+      destroyed,
+      contentType: secret.contentType || 'text'
     };
 
     // 如果是最后一次查看，删除秘密

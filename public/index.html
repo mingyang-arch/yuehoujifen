@@ -277,6 +277,135 @@
       background: #667eea;
       color: white;
     }
+
+    /* 标签切换 */
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: #667eea;
+    }
+
+    .tab-btn.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* 拖拽上传区域 */
+    .upload-area {
+      border: 2px dashed #e0e0e0;
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 20px;
+      background: #fafafa;
+    }
+
+    .upload-area:hover,
+    .upload-area.dragover {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+
+    .upload-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+      color: #999;
+    }
+
+    .upload-text {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .upload-hint {
+      color: #999;
+      font-size: 12px;
+    }
+
+    .upload-area input[type="file"] {
+      display: none;
+    }
+
+    /* 图片预览 */
+    .image-preview {
+      display: none;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .image-preview.show {
+      display: block;
+    }
+
+    .preview-container {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+    }
+
+    .preview-img {
+      max-width: 100%;
+      max-height: 300px;
+      border-radius: 8px;
+      border: 2px solid #667eea;
+    }
+
+    .preview-info {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .remove-image {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #dc3545;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .remove-image:hover {
+      background: #c82333;
+    }
   </style>
 </head>
 <body>
@@ -285,11 +414,37 @@
     <p class="subtitle">分享一次性秘密，阅读后立即销毁</p>
 
     <div id="inputSection">
-      <textarea
-        id="secretInput"
-        placeholder="输入你的秘密内容...&#10;（临时密码、私密消息等）"
-        maxlength="10000"
-      ></textarea>
+      <!-- 标签切换 -->
+      <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="text">文本秘密</button>
+        <button type="button" class="tab-btn" data-tab="image">图片秘密</button>
+      </div>
+
+      <!-- 文本内容 -->
+      <div id="textTab" class="tab-content active">
+        <textarea
+          id="secretInput"
+          placeholder="输入你的秘密内容...&#10;（临时密码、私密消息等）"
+          maxlength="10000"
+        ></textarea>
+      </div>
+
+      <!-- 图片上传 -->
+      <div id="imageTab" class="tab-content">
+        <div id="uploadArea" class="upload-area">
+          <div class="upload-icon">&#128247;</div>
+          <p class="upload-text">点击或拖拽图片到此处上传</p>
+          <p class="upload-hint">支持 JPG, PNG, GIF, WebP，最大 10MB</p>
+          <input type="file" id="imageInput" accept="image/jpeg,image/png,image/gif,image/webp">
+        </div>
+        <div id="imagePreview" class="image-preview">
+          <div class="preview-container">
+            <img id="previewImg" class="preview-img" src="" alt="预览">
+            <button type="button" class="remove-image" onclick="removeImage()">&times;</button>
+          </div>
+          <p id="previewInfo" class="preview-info"></p>
+        </div>
+      </div>
 
       <div class="options-section">
         <span class="option-label">过期时间</span>
@@ -346,6 +501,24 @@
   <script>
     let selectedExpiry = '24h';
     let selectedMaxViews = 1;
+    let selectedContentType = 'text';
+    let selectedFile = null;
+
+    // 标签切换
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const tab = this.dataset.tab;
+        selectedContentType = tab;
+
+        // 更新标签按钮状态
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+
+        // 切换内容区域
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(tab + 'Tab').classList.add('active');
+      });
+    });
 
     // 选项按钮事件
     document.querySelectorAll('#expiryOptions .option-btn').forEach(btn => {
@@ -376,13 +549,96 @@
       }
     });
 
-    async function generateLink() {
-      const input = document.getElementById('secretInput');
-      const content = input.value.trim();
+    // 图片上传功能
+    const uploadArea = document.getElementById('uploadArea');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+    const previewInfo = document.getElementById('previewInfo');
 
-      if (!content) {
-        alert('请输入秘密内容');
+    // 点击上传
+    uploadArea.addEventListener('click', () => imageInput.click());
+
+    // 文件选择
+    imageInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    // 拖拽上传
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      // 验证文件类型
+      if (!CryptoUtils.SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+        alert('不支持的图片格式，请选择 JPG, PNG, GIF 或 WebP 格式');
         return;
+      }
+
+      // 验证文件大小
+      if (file.size > CryptoUtils.MAX_FILE_SIZE) {
+        alert('文件大小超过 10MB 限制');
+        return;
+      }
+
+      selectedFile = file;
+
+      // 显示预览
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImg.src = e.target.result;
+        const sizeText = file.size < 1024 * 1024
+          ? (file.size / 1024).toFixed(1) + ' KB'
+          : (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+        previewInfo.textContent = `${file.name} (${sizeText})`;
+        uploadArea.style.display = 'none';
+        imagePreview.classList.add('show');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeImage() {
+      selectedFile = null;
+      imageInput.value = '';
+      previewImg.src = '';
+      previewInfo.textContent = '';
+      imagePreview.classList.remove('show');
+      uploadArea.style.display = 'block';
+    }
+
+    async function generateLink() {
+      let content;
+      let contentType = selectedContentType;
+
+      if (contentType === 'text') {
+        content = document.getElementById('secretInput').value.trim();
+        if (!content) {
+          alert('请输入秘密内容');
+          return;
+        }
+      } else {
+        if (!selectedFile) {
+          alert('请选择图片');
+          return;
+        }
+        content = selectedFile;
       }
 
       const enablePassword = document.getElementById('enablePassword').checked;
@@ -398,8 +654,8 @@
       btn.textContent = '加密中...';
 
       try {
-        // 客户端加密
-        const encrypted = await CryptoUtils.encrypt(content, password);
+        // 客户端加密 (使用新的统一接口)
+        const encrypted = await CryptoUtils.encryptContent(content, contentType, password);
 
         // 发送到服务器
         const response = await fetch('/api/secret', {
@@ -413,7 +669,8 @@
             salt: encrypted.salt,
             passwordHash: encrypted.passwordHash,
             expiresIn: selectedExpiry,
-            maxViews: selectedMaxViews
+            maxViews: selectedMaxViews,
+            contentType: contentType
           })
         });
 
@@ -433,7 +690,8 @@
 
         // 显示信息
         const expiryText = {'5m': '5分钟', '1h': '1小时', '24h': '24小时', '7d': '7天'}[selectedExpiry];
-        let infoText = `<strong>过期时间:</strong> ${expiryText} | <strong>可查看:</strong> ${selectedMaxViews}次`;
+        const typeText = contentType === 'text' ? '文本' : '图片';
+        let infoText = `<strong>类型:</strong> ${typeText} | <strong>过期时间:</strong> ${expiryText} | <strong>可查看:</strong> ${selectedMaxViews}次`;
         if (password) {
           infoText += ` | <strong>密码保护:</strong> 已启用`;
         }
@@ -461,10 +719,23 @@
     }
 
     function reset() {
+      // 重置文本
       document.getElementById('secretInput').value = '';
       document.getElementById('passwordInput').value = '';
       document.getElementById('enablePassword').checked = false;
       document.getElementById('passwordInput').classList.remove('show');
+
+      // 重置图片
+      removeImage();
+
+      // 重置标签到文本
+      selectedContentType = 'text';
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === 'text');
+      });
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById('textTab').classList.add('active');
+
       document.getElementById('inputSection').style.display = 'block';
       document.getElementById('result').classList.remove('show');
       document.getElementById('generateBtn').disabled = false;

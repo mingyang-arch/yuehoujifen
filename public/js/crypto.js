@@ -1,7 +1,12 @@
 /**
  * 客户端加密模块 - AES-256-GCM
+ * 支持文本和二进制数据（图片）加密
  */
 const CryptoUtils = {
+  // 支持的图片类型
+  SUPPORTED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+
   /**
    * 生成随机字节
    */
@@ -197,6 +202,187 @@ const CryptoUtils = {
     const data = encoder.encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     return this.toBase64(hashBuffer);
+  },
+
+  /**
+   * 文件转 ArrayBuffer
+   * @param {File} file - 文件对象
+   * @returns {Promise<ArrayBuffer>}
+   */
+  async fileToArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('读取文件失败'));
+      reader.readAsArrayBuffer(file);
+    });
+  },
+
+  /**
+   * 统一加密接口，支持文本和文件
+   * 数据格式: [元数据长度 4字节][元数据 JSON][原始内容]
+   * @param {string|File} content - 文本内容或文件对象
+   * @param {string} contentType - 'text' 或 'image'
+   * @param {string|null} password - 可选密码
+   * @returns {Promise<{ciphertext: string, iv: string, salt: string|null, keyFragment: string, passwordHash: string|null, contentType: string, fileName: string|null, mimeType: string|null}>}
+   */
+  async encryptContent(content, contentType = 'text', password = null) {
+    let dataBytes;
+    let metadata = { type: contentType };
+
+    if (contentType === 'text') {
+      // 文本内容
+      const encoder = new TextEncoder();
+      dataBytes = encoder.encode(content);
+    } else if (contentType === 'image') {
+      // 图片文件
+      if (!(content instanceof File)) {
+        throw new Error('图片内容必须是 File 对象');
+      }
+      if (!this.SUPPORTED_IMAGE_TYPES.includes(content.type)) {
+        throw new Error('不支持的图片格式');
+      }
+      if (content.size > this.MAX_FILE_SIZE) {
+        throw new Error('文件大小超过 10MB 限制');
+      }
+      metadata.fileName = content.name;
+      metadata.mimeType = content.type;
+      const arrayBuffer = await this.fileToArrayBuffer(content);
+      dataBytes = new Uint8Array(arrayBuffer);
+    } else {
+      throw new Error('不支持的内容类型');
+    }
+
+    // 序列化元数据
+    const metadataJson = JSON.stringify(metadata);
+    const metadataBytes = new TextEncoder().encode(metadataJson);
+
+    // 组装数据: [元数据长度 4字节][元数据][内容]
+    const metadataLength = metadataBytes.length;
+    const totalLength = 4 + metadataLength + dataBytes.length;
+    const combinedData = new Uint8Array(totalLength);
+
+    // 写入元数据长度 (4字节, big-endian)
+    combinedData[0] = (metadataLength >> 24) & 0xff;
+    combinedData[1] = (metadataLength >> 16) & 0xff;
+    combinedData[2] = (metadataLength >> 8) & 0xff;
+    combinedData[3] = metadataLength & 0xff;
+
+    // 写入元数据
+    combinedData.set(metadataBytes, 4);
+
+    // 写入内容
+    combinedData.set(dataBytes, 4 + metadataLength);
+
+    // 生成随机密钥 (32 bytes = 256 bits)
+    const masterKey = this.getRandomBytes(32);
+
+    // 生成随机 IV (12 bytes for GCM)
+    const iv = this.getRandomBytes(12);
+
+    let encryptKey = masterKey;
+    let salt = null;
+    let passwordHash = null;
+
+    // 如果有密码保护
+    if (password) {
+      salt = this.getRandomBytes(16);
+      const derivedKey = await this.deriveKey(password, salt);
+      encryptKey = this.xorBytes(masterKey, derivedKey);
+      passwordHash = await this.hashPassword(password);
+    }
+
+    // 导入密钥
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      encryptKey,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt']
+    );
+
+    // 加密
+    const ciphertextBuffer = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv },
+      cryptoKey,
+      combinedData
+    );
+
+    return {
+      ciphertext: this.toBase64(ciphertextBuffer),
+      iv: this.toBase64(iv),
+      salt: salt ? this.toBase64(salt) : null,
+      keyFragment: this.toBase64URL(masterKey),
+      passwordHash,
+      contentType,
+      fileName: metadata.fileName || null,
+      mimeType: metadata.mimeType || null
+    };
+  },
+
+  /**
+   * 统一解密接口
+   * @param {string} ciphertext - Base64 密文
+   * @param {string} iv - Base64 IV
+   * @param {string} keyFragment - URL密钥片段
+   * @param {string|null} salt - Base64 盐
+   * @param {string|null} password - 用户密码
+   * @returns {Promise<{content: ArrayBuffer|string, metadata: {type: string, fileName?: string, mimeType?: string}}>}
+   */
+  async decryptContent(ciphertext, iv, keyFragment, salt = null, password = null) {
+    const masterKey = this.fromBase64URL(keyFragment);
+    const ivBytes = this.fromBase64(iv);
+    const ciphertextBytes = this.fromBase64(ciphertext);
+
+    let decryptKey = masterKey;
+
+    // 如果有密码保护
+    if (salt && password) {
+      const saltBytes = this.fromBase64(salt);
+      const derivedKey = await this.deriveKey(password, saltBytes);
+      decryptKey = this.xorBytes(masterKey, derivedKey);
+    }
+
+    // 导入密钥
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      decryptKey,
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
+
+    // 解密
+    const decryptedBuffer = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: ivBytes },
+      cryptoKey,
+      ciphertextBytes
+    );
+
+    const decryptedBytes = new Uint8Array(decryptedBuffer);
+
+    // 解析元数据长度
+    const metadataLength = (decryptedBytes[0] << 24) |
+                          (decryptedBytes[1] << 16) |
+                          (decryptedBytes[2] << 8) |
+                          decryptedBytes[3];
+
+    // 解析元数据
+    const metadataBytes = decryptedBytes.slice(4, 4 + metadataLength);
+    const metadataJson = new TextDecoder().decode(metadataBytes);
+    const metadata = JSON.parse(metadataJson);
+
+    // 解析内容
+    const contentBytes = decryptedBytes.slice(4 + metadataLength);
+
+    if (metadata.type === 'text') {
+      // 文本内容，转换为字符串
+      const content = new TextDecoder().decode(contentBytes);
+      return { content, metadata };
+    } else {
+      // 二进制内容（图片），返回 ArrayBuffer
+      return { content: contentBytes.buffer, metadata };
+    }
   }
 };
 
